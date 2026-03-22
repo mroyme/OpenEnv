@@ -342,6 +342,7 @@ setup_auth() {
 
 pin_openenv_refs_in_pyproject() {
     local file_path="$1"
+    local stage_dir="${2:-}"
 
     [ -f "$file_path" ] || return 0
 
@@ -354,6 +355,12 @@ pin_openenv_refs_in_pyproject() {
     sed_inplace \
         "/^[[:space:]]*\"/ s|git+https://github.com/meta-pytorch/OpenEnv.git\"|git+https://github.com/meta-pytorch/OpenEnv.git@$OPENENV_GIT_REF\"|g" \
         "$file_path"
+
+    # Skip rewriting version-pinned constraints when a local wheel is present.
+    # The env's uv.toml find-links will resolve it from wheels/ at build time.
+    if [ -n "$stage_dir" ] && ls "$stage_dir"/wheels/openenv_core*.whl >/dev/null 2>&1; then
+        return 0
+    fi
     sed_inplace \
         "/^[[:space:]]*\"/ s|\"openenv-core\\[core\\][^\"]*\"|\"openenv-core[core] @ git+https://github.com/meta-pytorch/OpenEnv.git@$OPENENV_GIT_REF\"|g" \
         "$file_path"
@@ -668,8 +675,8 @@ prepare_stage() {
     strip_stage_artifacts "$stage_dir"
 
     # Pin OpenEnv refs in both possible pyproject locations.
-    pin_openenv_refs_in_pyproject "$stage_dir/pyproject.toml"
-    pin_openenv_refs_in_pyproject "$stage_dir/envs/$env_name/pyproject.toml"
+    pin_openenv_refs_in_pyproject "$stage_dir/pyproject.toml" "$stage_dir"
+    pin_openenv_refs_in_pyproject "$stage_dir/envs/$env_name/pyproject.toml" "$stage_dir"
 
     create_environment_dockerfile "$env_name" "$stage_dir"
     create_readme "$env_name" "$stage_dir"
